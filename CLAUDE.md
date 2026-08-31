@@ -95,7 +95,7 @@ This strict format allows reliable parsing while still getting thoughtful evalua
 
 ### De-anonymization Strategy
 - Models receive: "Response A", "Response B", etc.
-- Backend creates mapping: `{"Response A": "openai/gpt-5.1", ...}`
+- Backend creates mapping: `{"Response A": "openai/gpt-5.6-sol", ...}`
 - Frontend displays model names in **bold** for readability
 - Users see explanation that original evaluation used anonymous labels
 - This prevents bias while maintaining transparency
@@ -127,8 +127,10 @@ All ReactMarkdown components must be wrapped in `<div className="markdown-conten
 ### Model Configuration
 Defaults live in `backend/config.py` and can be overridden from `.env` via `COUNCIL_MODELS`,
 `CHAIRMAN_MODEL` and `TITLE_MODEL` (comma-separated; aliases or full OpenRouter ids). Chairman can
-be same or different from council members; the default is Gemini as chairman. The default council is
-the four frontier models plus DeepSeek, Qwen and Kimi.
+be same or different from council members; the default is Claude Opus 5, which also sits on the
+council. The default council is GPT-5.6 Sol, Claude Opus 5, Gemini 3.7 Flash, Grok 4.6, DeepSeek
+V4 Flash, Qwen3.7 Max and Kimi K3. Model slugs churn - verify against openrouter.ai/models before
+assuming a quiet member is a code bug.
 
 ## Common Gotchas
 

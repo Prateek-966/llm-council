@@ -2,10 +2,11 @@
 
 ![llmcouncil](header.jpg)
 
-A replica of [karpathy/llm-council](https://github.com/karpathy/llm-council), with the council
-extended to include the open-weight Chinese models (DeepSeek, Qwen, Kimi) alongside the frontier ones.
+A replica of [karpathy/llm-council](https://github.com/karpathy/llm-council), running current
+model versions and seating the top open-weight models (DeepSeek, Qwen, Kimi) next to the frontier
+ones, with Claude Opus 5 in the chair.
 
-The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT 5.1, Google Gemini 3.0 Pro, Anthropic Claude Sonnet 4.5, xAI Grok 4, eg.c), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses OpenRouter to send your query to multiple LLMs, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
+The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT-5.6 Sol, Anthropic Claude Opus 5, Google Gemini 3.7 Flash, xAI Grok 4.6, DeepSeek, Qwen, Kimi), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses OpenRouter to send your query to multiple LLMs, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
 
 In a bit more detail, here is what happens when you submit a query:
 
@@ -47,38 +48,59 @@ Get your API key at [openrouter.ai](https://openrouter.ai/). Make sure to purcha
 
 ### 3. Configure Models (Optional)
 
-The council defaults to seven members - the four frontier models from the original repo plus
-DeepSeek, Qwen and Kimi:
+The council has seven members - four frontier models and the three leading open-weight ones -
+and Claude Opus 5 chairs:
 
 ```python
 COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
-    "deepseek/deepseek-v4-pro",
+    "openai/gpt-5.6-sol",
+    "anthropic/claude-opus-5",
+    "google/gemini-3.7-flash",
+    "x-ai/grok-4.6",
+    "deepseek/deepseek-v4-flash-0731",
     "qwen/qwen3.7-max",
     "moonshotai/kimi-k3",
 ]
 
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
+CHAIRMAN_MODEL = "anthropic/claude-opus-5"
 ```
 
-Edit `backend/config.py` to change them, or override from `.env` without touching the code.
-Short aliases (`gpt`, `gemini`, `claude`, `grok`, `deepseek`, `qwen`, `kimi`, `glm`, `minimax`)
-and full OpenRouter model ids both work:
+Claude sits on the council *and* chairs it, which is how upstream ran it (with Gemini). It
+reviews its own Stage 1 answer in Stage 2, though anonymization means it doesn't know which one
+is its own.
+
+Edit `backend/config.py` to change the roster, or override from `.env` without touching the code.
+Short aliases and full OpenRouter model ids both work:
+
+| Alias | Resolves to |
+| --- | --- |
+| `gpt` | `openai/gpt-5.6-sol` |
+| `claude` | `anthropic/claude-opus-5` |
+| `claude-sonnet` | `anthropic/claude-sonnet-5` |
+| `gemini` | `google/gemini-3.7-flash` |
+| `gemini-pro` | `google/gemini-3.1-pro-preview` |
+| `grok` | `x-ai/grok-4.6` |
+| `deepseek` | `deepseek/deepseek-v4-flash-0731` |
+| `deepseek-pro` | `deepseek/deepseek-v4-pro-0813` |
+| `qwen` | `qwen/qwen3.7-max` |
+| `kimi` | `moonshotai/kimi-k3` |
 
 ```bash
-COUNCIL_MODELS=deepseek,qwen,kimi,glm      # an all-open-weights council
-CHAIRMAN_MODEL=deepseek
-TITLE_MODEL=google/gemini-2.5-flash        # small model that names conversations
+COUNCIL_MODELS=deepseek,qwen,kimi           # an all-open-weights council
+CHAIRMAN_MODEL=claude-sonnet                # cheaper synthesis
+TITLE_MODEL=google/gemini-3.7-flash         # small model that names conversations
 ```
 
-Every model runs through OpenRouter, so any model in their catalog can join the council - see
-[openrouter.ai/models](https://openrouter.ai/models). Model slugs move fast (labs ship new
-versions every few weeks and retire old ones), so if a member silently returns nothing, check
-its id against the live catalog first. Note that cost and latency scale with council size:
-each member answers in Stage 1 *and* reviews everyone else in Stage 2.
+Every call goes through OpenRouter, so any model in their catalog can join - see
+[openrouter.ai/models](https://openrouter.ai/models). Two things to keep in mind:
+
+- **Slugs go stale fast.** Labs ship new versions every few weeks and retire old ones. If a member
+  silently stops contributing, check its id against the live catalog first - a bad slug is caught
+  and logged in `query_model`, and that member is just dropped from the round.
+- **Cost scales worse than linearly with council size.** Each member answers in Stage 1 *and*
+  reviews every other member's answer in Stage 2, so the Stage 2 prompt grows with the roster.
+  Swap in cheaper tiers (`gemini`, `deepseek`, `claude-sonnet`) or trim `COUNCIL_MODELS` if a
+  round costs more than it's worth to you.
 
 ## Running the Application
 
