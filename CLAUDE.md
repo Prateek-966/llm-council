@@ -16,6 +16,9 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 - Contains `TITLE_MODEL` (small model that names conversations)
 - Contains `MODEL_ALIASES` (short names like `deepseek`/`qwen`/`kimi` -> OpenRouter slugs)
 - Uses environment variable `OPENROUTER_API_KEY` from `.env`
+- `OPENROUTER_API_URL` is overridable, so any OpenAI-compatible endpoint works (Ollama et al.).
+  When the key is empty the `Authorization` header is omitted entirely - httpx raises on a bare
+  `Bearer ` value, and local servers don't want the header anyway.
 - Backend runs on **port 8001** (NOT 8000 - user had another app on 8000)
 
 **`openrouter.py`**

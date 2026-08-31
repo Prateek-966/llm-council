@@ -102,6 +102,47 @@ Every call goes through OpenRouter, so any model in their catalog can join - see
   Swap in cheaper tiers (`gemini`, `deepseek`, `claude-sonnet`) or trim `COUNCIL_MODELS` if a
   round costs more than it's worth to you.
 
+### 4. Running it for free (Optional)
+
+Two ways to pay nothing.
+
+**a) Free models on OpenRouter.** Model ids ending in `:free` cost $0. Still needs an OpenRouter
+account, but no card and no credits:
+
+```bash
+COUNCIL_MODELS=<model-a>:free,<model-b>:free,<model-c>:free
+CHAIRMAN_MODEL=<model-a>:free
+TITLE_MODEL=<model-a>:free
+```
+
+The free roster rotates monthly, so pick current ids from
+[openrouter.ai/collections/free-models](https://openrouter.ai/collections/free-models). The catch is
+throughput: 20 requests/minute, and 50 requests/day at a $0 balance (1000/day once you have ever
+bought $10 in credits). One council round with N members costs 2N+2 requests - so a 3-member
+council is 8 requests, about six rounds/day on the free floor. Failed calls count against the quota
+too.
+
+**b) Local models, no API at all.** The backend talks plain OpenAI-compatible chat-completions, so
+any local runtime works. With [Ollama](https://ollama.com):
+
+```bash
+ollama pull qwen3:8b && ollama pull llama3.1:8b && ollama pull deepseek-r1:8b
+```
+
+```bash
+# .env
+OPENROUTER_API_URL=http://localhost:11434/v1/chat/completions
+OPENROUTER_API_KEY=
+COUNCIL_MODELS=qwen3:8b,llama3.1:8b,deepseek-r1:8b
+CHAIRMAN_MODEL=qwen3:8b
+TITLE_MODEL=llama3.1:8b
+```
+
+Unlimited, offline, no account. The trade is quality and speed - these are small local models, not
+the frontier ones, and Ollama runs them one at a time, so the council's parallel stages become
+sequential. Note that council members here are *local* model tags (`qwen3:8b`), not OpenRouter
+slugs (`qwen/qwen3.7-max`), and the aliases in `config.py` don't apply.
+
 ## Running the Application
 
 **Option 1: Use the start script**

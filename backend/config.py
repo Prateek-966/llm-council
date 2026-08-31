@@ -58,8 +58,12 @@ CHAIRMAN_MODEL = _resolve(os.getenv("CHAIRMAN_MODEL", "anthropic/claude-opus-5")
 # Small, cheap model used only to name conversations
 TITLE_MODEL = _resolve(os.getenv("TITLE_MODEL", "google/gemini-3.7-flash"))
 
-# OpenRouter API endpoint
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Chat-completions endpoint. Any OpenAI-compatible server works here, so pointing this at a
+# local runtime (Ollama: http://localhost:11434/v1/chat/completions) runs the whole council
+# offline for free. The API key is unused by most local servers - leave it blank.
+OPENROUTER_API_URL = os.getenv(
+    "OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions"
+)
 
 # Data directory for conversation storage
 DATA_DIR = "data/conversations"

@@ -21,10 +21,12 @@ async def query_model(
     Returns:
         Response dict with 'content' and optional 'reasoning_details', or None if failed
     """
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+
+    # Local OpenAI-compatible servers (Ollama, LM Studio) take no key, and httpx rejects
+    # a bare "Bearer " header, so only send it when a key is actually configured.
+    if OPENROUTER_API_KEY:
+        headers["Authorization"] = f"Bearer {OPENROUTER_API_KEY}"
 
     payload = {
         "model": model,
