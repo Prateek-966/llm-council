@@ -65,5 +65,12 @@ OPENROUTER_API_URL = os.getenv(
     "OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions"
 )
 
-# Data directory for conversation storage
+# Data directory for conversation storage (JSON backend)
 DATA_DIR = "data/conversations"
+
+# Supabase storage. Set both to persist conversations in Postgres instead of local
+# JSON files - required on hosts with an ephemeral disk, such as Render's free tier.
+# SUPABASE_KEY must be the service-role key: the table has RLS enabled with no
+# policies, so it is unreadable with the anon key. Backend-only, never exposed.
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")

@@ -10,6 +10,14 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 
 ### Backend Structure (`backend/`)
 
+**`storage.py` / `storage_json.py` / `storage_supabase.py`**
+- `storage.py` is the public API and picks a backend at import time: Supabase when both
+  `SUPABASE_URL` and `SUPABASE_KEY` are set, JSON files otherwise (`storage.BACKEND_NAME` says which)
+- The derived helpers (`add_user_message`, `add_assistant_message`, `update_conversation_title`) live
+  in `storage.py` and are shared; backends implement only create/get/save/list
+- Supabase is reached over PostgREST with httpx - no Postgres driver - using the service-role key,
+  since the table has RLS on with no policies
+
 **`config.py`**
 - Contains `COUNCIL_MODELS` (list of OpenRouter model identifiers)
 - Contains `CHAIRMAN_MODEL` (model that synthesizes final answer)

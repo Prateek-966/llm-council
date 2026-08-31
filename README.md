@@ -177,12 +177,34 @@ Three things about the free tier that shape what you get:
 - **The backend sleeps.** Free web services spin down after 15 minutes of inactivity; the next
   request takes 30-60 seconds to wake it. The first question after a quiet spell will feel broken
   but isn't. 750 instance-hours/month across the workspace.
-- **Conversation history is not durable.** The free filesystem is ephemeral, so everything under
-  `data/` is wiped on every redeploy, restart and spin-down. Chats are effectively single-session.
-  A persistent disk is a paid add-on; a free Postgres (1 GB, expires 30 days after creation) plus a rewrite
-  of `storage.py` is the free workaround.
+- **Conversation history needs a database.** The free filesystem is ephemeral, so JSON files under
+  `data/` are wiped on every redeploy, restart and spin-down. Set `SUPABASE_URL` and `SUPABASE_KEY`
+  and conversations go to Postgres instead - see *Persistent storage* below.
 - **Nothing here runs a model.** 512 MB RAM and 0.1 CPU cannot host an LLM, so the inference still
   happens somewhere else - OpenRouter, or a machine you control (see below).
+
+## Persistent storage
+
+Conversations are JSON files under `data/` by default. Set both of these and they go to Supabase
+Postgres instead - no other change, the switch happens at import time:
+
+```bash
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_KEY=<service-role key>
+```
+
+Use the **service-role** key, not the anon/publishable one. The table runs with RLS enabled and no
+policies, so the anon key can read and write nothing; service-role bypasses RLS. It stays on the
+backend and is never shipped to the browser - do not put it in a `VITE_` variable, since those are
+baked into the JS bundle.
+
+The schema is `supabase/migrations/0001_create_conversations.sql`: one table keyed by conversation
+id, messages as `jsonb`, and `message_count` as a generated column so the sidebar listing doesn't
+have to ship every message body just to count them.
+
+Storage calls are synchronous HTTP, matching the synchronous file I/O they replace. That blocks the
+event loop briefly on each call, which is invisible next to multi-second model calls but would need
+revisiting under real concurrency.
 
 ## Tech Stack
 
