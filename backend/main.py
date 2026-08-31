@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any
+import os
 import uuid
 import json
 import asyncio
@@ -14,10 +15,19 @@ from .council import run_full_council, generate_conversation_title, stage1_colle
 
 app = FastAPI(title="LLM Council API")
 
-# Enable CORS for local development
+# Origins allowed to call this API. Defaults to the local dev servers; set
+# ALLOWED_ORIGINS (comma-separated) to the deployed frontend's URL in production.
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -196,4 +206,5 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    # Hosts like Render assign the port via $PORT; 8001 locally.
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "8001")))

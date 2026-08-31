@@ -1,0 +1,51 @@
+# Render blueprint: static frontend + FastAPI backend, both on the free tier.
+#
+# After the first deploy, set these in the Render dashboard:
+#   backend  -> OPENROUTER_API_KEY, COUNCIL_MODELS, CHAIRMAN_MODEL, ALLOWED_ORIGINS
+#   frontend -> VITE_API_URL (the backend's onrender.com URL)
+# ALLOWED_ORIGINS and VITE_API_URL are wired automatically below; the rest are
+# marked sync:false so they are entered once by hand and never committed.
+services:
+  - type: web
+    name: llm-council-api
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: llm-council-ui
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_API_URL
+        sync: false
+      - key: COUNCIL_MODELS
+        sync: false
+      - key: CHAIRMAN_MODEL
+        sync: false
+      - key: TITLE_MODEL
+        sync: false
+
+  - type: web
+    name: llm-council-ui
+    runtime: static
+    plan: free
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: llm-council-api
+          envVarKey: RENDER_EXTERNAL_URL
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

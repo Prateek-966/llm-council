@@ -165,6 +165,25 @@ npm run dev
 
 Then open http://localhost:5173 in your browser.
 
+## Deploying to Render
+
+`render.yaml` is a blueprint for both services on Render's free tier: the frontend as a static
+site, the backend as a Python web service. Point Render at this repo (New > Blueprint), then set
+`OPENROUTER_API_KEY` on the backend service - `ALLOWED_ORIGINS` and `VITE_API_URL` are wired
+between the two services automatically.
+
+Three things about the free tier that shape what you get:
+
+- **The backend sleeps.** Free web services spin down after 15 minutes of inactivity; the next
+  request takes 30-60 seconds to wake it. The first question after a quiet spell will feel broken
+  but isn't. 750 instance-hours/month across the workspace.
+- **Conversation history is not durable.** The free filesystem is ephemeral, so everything under
+  `data/` is wiped on every redeploy, restart and spin-down. Chats are effectively single-session.
+  A persistent disk is a paid add-on; a free Postgres (1 GB, expires 30 days after creation) plus a rewrite
+  of `storage.py` is the free workaround.
+- **Nothing here runs a model.** 512 MB RAM and 0.1 CPU cannot host an LLM, so the inference still
+  happens somewhere else - OpenRouter, or a machine you control (see below).
+
 ## Tech Stack
 
 - **Backend:** FastAPI (Python 3.10+), async httpx, OpenRouter API
