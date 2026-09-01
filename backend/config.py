@@ -65,6 +65,11 @@ OPENROUTER_API_URL = os.getenv(
     "OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions"
 )
 
+# Conversation memory: how many prior messages (user + assistant, so 6 is three
+# exchanges) are replayed to the models. Every prior turn is re-sent on every
+# request of every stage, so this multiplies cost - 0 disables memory entirely.
+HISTORY_MESSAGES = int(os.getenv("HISTORY_MESSAGES", "6"))
+
 # Data directory for conversation storage (JSON backend)
 DATA_DIR = "data/conversations"
 

@@ -165,6 +165,35 @@ npm run dev
 
 Then open http://localhost:5173 in your browser.
 
+## Conversation memory
+
+Follow-up questions work: prior turns are replayed to every model, so "what about the
+second one?" resolves against what was actually said. The assistant's turn in that replay is
+the chairman's synthesis - the answer you saw - not the individual drafts or the peer reviews,
+which would bloat the prompt without adding much.
+
+`HISTORY_MESSAGES` (default 6, meaning three exchanges) caps how far back it reaches. This is
+the one setting that multiplies cost: history is re-sent on every request of every stage, so a
+5-member council pays for it 11 times per round. Roughly +12% per exchange remembered, and it
+plateaus once the cap is reached rather than growing forever. Set it to 0 to disable memory and
+treat every question as independent.
+
+## When things go wrong
+
+Failures are reported in the UI rather than swallowed. A model that errors is dropped from the
+round instead of failing the whole request, so without this the only symptom is a tab that
+quietly is not there.
+
+Each failure is classified and shown with the setting that fixes it - an unusable API key (401),
+exhausted credit or a key spend limit (402), a model id that no longer exists (404), rate
+limiting (429), timeouts, and provider errors. A conversation that cannot be saved is reported
+too, which is what a wrong `SUPABASE_KEY` looks like: the anon key is blocked by RLS. Backend
+unreachable and a blocked CORS preflight both surface as an opaque `TypeError` in the browser,
+so the UI names both possibilities rather than logging to a console nobody has open.
+
+`GET /` reports the live configuration - storage backend, council, chairman, memory depth - and
+the UI warns when conversations are being written to a disk that will not keep them.
+
 ## Deploying to Render
 
 `render.yaml` is a blueprint for both services on Render's free tier: the frontend as a static

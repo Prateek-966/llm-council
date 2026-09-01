@@ -11,7 +11,8 @@ import json
 import asyncio
 
 from . import storage
-from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .config import COUNCIL_MODELS, CHAIRMAN_MODEL, HISTORY_MESSAGES
+from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings, build_history
 
 app = FastAPI(title="LLM Council API")
 
@@ -62,8 +63,18 @@ class Conversation(BaseModel):
 
 @app.get("/")
 async def root():
-    """Health check endpoint."""
-    return {"status": "ok", "service": "LLM Council API"}
+    """Health check, and the live configuration the UI warns about."""
+    return {
+        "status": "ok",
+        "service": "LLM Council API",
+        "storage": storage.BACKEND_NAME,
+        # JSON files do not survive a restart on hosts with an ephemeral disk,
+        # so the UI tells the user their conversations are not being kept.
+        "ephemeral_storage": storage.BACKEND_NAME == "json",
+        "council": COUNCIL_MODELS,
+        "chairman": CHAIRMAN_MODEL,
+        "history_messages": HISTORY_MESSAGES,
+    }
 
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
@@ -103,6 +114,9 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
     # Check if this is the first message
     is_first_message = len(conversation["messages"]) == 0
 
+    # Prior turns, captured before this message is appended
+    history = build_history(conversation["messages"])
+
     # Add user message
     storage.add_user_message(conversation_id, request.content)
 
@@ -113,7 +127,7 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
     # Run the 3-stage council process
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        request.content
+        request.content, history
     )
 
     # Add assistant message with all stages
@@ -147,6 +161,9 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     # Check if this is the first message
     is_first_message = len(conversation["messages"]) == 0
 
+    # Prior turns, captured before this message is appended
+    history = build_history(conversation["messages"])
+
     async def event_generator():
         try:
             # Add user message
@@ -159,18 +176,23 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             # Stage 1: Collect responses
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(request.content)
-            yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
+            stage1_results, stage1_errors = await stage1_collect_responses(request.content, history)
+            yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results, 'errors': stage1_errors, 'council_size': len(COUNCIL_MODELS)})}\n\n"
+
+            # Nothing to rank or synthesize if every member failed.
+            if not stage1_results:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Every council member failed to respond.', 'errors': stage1_errors})}\n\n"
+                return
 
             # Stage 2: Collect rankings
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
+            stage2_results, label_to_model, stage2_errors = await stage2_collect_rankings(request.content, stage1_results, history)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
-            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
+            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'errors': stage2_errors, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
             # Stage 3: Synthesize final answer
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results)
+            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results, history)
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Wait for title generation if it was started
@@ -191,8 +213,25 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
         except Exception as e:
-            # Send error event
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            # Storage is the usual suspect here: a rejected Supabase key surfaces as
+            # an HTTP error from PostgREST rather than anything model-related.
+            detail = str(e)[:300]
+            payload = {
+                "type": "error",
+                "message": detail,
+                "errors": [{
+                    "model": f"storage ({storage.BACKEND_NAME})",
+                    "kind": "storage",
+                    "status": None,
+                    "message": detail,
+                    "hint": (
+                        "Saving the conversation failed. If this is Supabase, SUPABASE_KEY "
+                        "must be the service-role or secret key - the anon key is blocked by RLS."
+                    ),
+                    "stage": "storage",
+                }],
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
 
     return StreamingResponse(
         event_generator(),

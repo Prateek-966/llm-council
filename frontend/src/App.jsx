@@ -9,10 +9,18 @@ function App() {
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  // Failures that are about the app itself (backend unreachable, request rejected)
+  // rather than about one model inside a round.
+  const [appError, setAppError] = useState(null);
+  const [health, setHealth] = useState(null);
 
   // Load conversations on mount
   useEffect(() => {
     loadConversations();
+    api
+      .getHealth()
+      .then(setHealth)
+      .catch(() => setHealth(null));
   }, []);
 
   // Load conversation details when selected
@@ -26,8 +34,17 @@ function App() {
     try {
       const convs = await api.listConversations();
       setConversations(convs);
+      setAppError(null);
     } catch (error) {
       console.error('Failed to load conversations:', error);
+      setAppError({
+        model: 'backend',
+        kind: error.kind === 'network' ? 'network' : 'http_error',
+        status: error.status || null,
+        message: error.message,
+        hint: 'Could not load your conversations.',
+        stage: null,
+      });
     }
   };
 
@@ -35,8 +52,17 @@ function App() {
     try {
       const conv = await api.getConversation(id);
       setCurrentConversation(conv);
+      setAppError(null);
     } catch (error) {
       console.error('Failed to load conversation:', error);
+      setAppError({
+        model: 'backend',
+        kind: error.kind === 'network' ? 'network' : 'http_error',
+        status: error.status || null,
+        message: error.message,
+        hint: 'Could not open that conversation.',
+        stage: null,
+      });
     }
   };
 
@@ -48,8 +74,17 @@ function App() {
         ...conversations,
       ]);
       setCurrentConversationId(newConv.id);
+      setAppError(null);
     } catch (error) {
       console.error('Failed to create conversation:', error);
+      setAppError({
+        model: 'backend',
+        kind: error.kind === 'network' ? 'network' : 'http_error',
+        status: error.status || null,
+        message: error.message,
+        hint: 'Could not start a new conversation.',
+        stage: null,
+      });
     }
   };
 
@@ -76,6 +111,9 @@ function App() {
         stage2: null,
         stage3: null,
         metadata: null,
+        errors: [],
+        councilSize: null,
+        fatal: false,
         loading: {
           stage1: false,
           stage2: false,
@@ -106,6 +144,8 @@ function App() {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
               lastMsg.stage1 = event.data;
+              lastMsg.errors = [...(lastMsg.errors || []), ...(event.errors || [])];
+              lastMsg.councilSize = event.council_size ?? lastMsg.councilSize;
               lastMsg.loading.stage1 = false;
               return { ...prev, messages };
             });
@@ -126,6 +166,7 @@ function App() {
               const lastMsg = messages[messages.length - 1];
               lastMsg.stage2 = event.data;
               lastMsg.metadata = event.metadata;
+              lastMsg.errors = [...(lastMsg.errors || []), ...(event.errors || [])];
               lastMsg.loading.stage2 = false;
               return { ...prev, messages };
             });
@@ -145,6 +186,9 @@ function App() {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
               lastMsg.stage3 = event.data;
+              if (event.data && event.data.error) {
+                lastMsg.errors = [...(lastMsg.errors || []), event.data.error];
+              }
               lastMsg.loading.stage3 = false;
               return { ...prev, messages };
             });
@@ -163,6 +207,26 @@ function App() {
 
           case 'error':
             console.error('Stream error:', event.message);
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = messages[messages.length - 1];
+              lastMsg.errors = [
+                ...(lastMsg.errors || []),
+                ...(event.errors || [
+                  {
+                    model: 'backend',
+                    kind: 'unknown',
+                    status: null,
+                    message: event.message,
+                    hint: 'The round stopped before finishing.',
+                    stage: null,
+                  },
+                ]),
+              ];
+              lastMsg.fatal = true;
+              lastMsg.loading = { stage1: false, stage2: false, stage3: false };
+              return { ...prev, messages };
+            });
             setIsLoading(false);
             break;
 
@@ -172,11 +236,26 @@ function App() {
       });
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Remove optimistic messages on error
-      setCurrentConversation((prev) => ({
-        ...prev,
-        messages: prev.messages.slice(0, -2),
-      }));
+      // Keep the user's message on screen and say why the round never ran.
+      setCurrentConversation((prev) => {
+        const messages = [...prev.messages];
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg && lastMsg.role === 'assistant') {
+          lastMsg.errors = [
+            {
+              model: 'backend',
+              kind: error.kind === 'network' ? 'network' : 'http_error',
+              status: error.status || null,
+              message: error.message,
+              hint: 'The council never ran.',
+              stage: null,
+            },
+          ];
+          lastMsg.fatal = true;
+          lastMsg.loading = { stage1: false, stage2: false, stage3: false };
+        }
+        return { ...prev, messages };
+      });
       setIsLoading(false);
     }
   };
@@ -193,6 +272,8 @@ function App() {
         conversation={currentConversation}
         onSendMessage={handleSendMessage}
         isLoading={isLoading}
+        appError={appError}
+        health={health}
       />
     </div>
   );

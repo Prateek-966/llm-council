@@ -30,12 +30,19 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 - Backend runs on **port 8001** (NOT 8000 - user had another app on 8000)
 
 **`openrouter.py`**
-- `query_model()`: Single async model query
+- `query_model()`: Single async model query. Always returns a dict: `content` on success,
+  or `error` with `{model, kind, status, message, hint}` on failure - never None, so callers
+  can report which member dropped out and why
+- `_STATUS_HINTS` maps HTTP status to a stable `kind` the frontend groups on, plus the hint
+  naming the setting to fix. A 200 response carrying an `error` body is a failure too
 - `query_models_parallel()`: Parallel queries using `asyncio.gather()`
 - Returns dict with 'content' and optional 'reasoning_details'
 - Graceful degradation: returns None on failure, continues with successful responses
 
 **`council.py`** - The Core Logic
+- `build_history()`: prior turns for model memory, using the chairman's synthesis as the
+  assistant turn (never the Stage 1 drafts or Stage 2 reviews). Capped by `HISTORY_MESSAGES`;
+  history is re-sent on every request of every stage, so it multiplies cost
 - `stage1_collect_responses()`: Parallel queries to all council models
 - `stage2_collect_rankings()`:
   - Anonymizes responses as "Response A, B, C, etc."

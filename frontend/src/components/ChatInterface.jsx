@@ -3,12 +3,15 @@ import ReactMarkdown from 'react-markdown';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
+import ErrorBanner from './ErrorBanner';
 import './ChatInterface.css';
 
 export default function ChatInterface({
   conversation,
   onSendMessage,
   isLoading,
+  appError,
+  health,
 }) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
@@ -37,9 +40,23 @@ export default function ChatInterface({
     }
   };
 
+  const banners = (
+    <>
+      {appError && <ErrorBanner errors={[appError]} fatal />}
+      {health?.ephemeral_storage && (
+        <div className="storage-warning">
+          Conversations are being written to local files, not a database. On a host
+          with an ephemeral disk they are lost on every restart and idle spin-down.
+          Set SUPABASE_URL and SUPABASE_KEY to keep them.
+        </div>
+      )}
+    </>
+  );
+
   if (!conversation) {
     return (
       <div className="chat-interface">
+        <div className="messages-container">{banners}</div>
         <div className="empty-state">
           <h2>Welcome to LLM Council</h2>
           <p>Create a new conversation to get started</p>
@@ -51,6 +68,7 @@ export default function ChatInterface({
   return (
     <div className="chat-interface">
       <div className="messages-container">
+        {banners}
         {conversation.messages.length === 0 ? (
           <div className="empty-state">
             <h2>Start a conversation</h2>
@@ -71,6 +89,12 @@ export default function ChatInterface({
               ) : (
                 <div className="assistant-message">
                   <div className="message-label">LLM Council</div>
+
+                  <ErrorBanner
+                    errors={msg.errors}
+                    councilSize={msg.councilSize}
+                    fatal={msg.fatal}
+                  />
 
                   {/* Stage 1 */}
                   {msg.loading?.stage1 && (
@@ -103,7 +127,9 @@ export default function ChatInterface({
                       <span>Running Stage 3: Final synthesis...</span>
                     </div>
                   )}
-                  {msg.stage3 && <Stage3 finalResponse={msg.stage3} />}
+                  {msg.stage3 && !msg.stage3.error && (
+                    <Stage3 finalResponse={msg.stage3} />
+                  )}
                 </div>
               )}
             </div>

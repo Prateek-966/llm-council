@@ -5,15 +5,60 @@
 // Set VITE_API_URL at build time to point the UI at a deployed backend.
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
+/**
+ * A fetch that fails loudly. A dead backend, a blocked CORS preflight and an HTTP
+ * error are three different problems with three different fixes, and the browser
+ * reports the first two identically as an opaque TypeError - so name them here.
+ */
+async function request(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, options);
+  } catch (cause) {
+    const err = new Error(
+      `Cannot reach the backend at ${API_BASE}. It may still be waking up ` +
+        `(free instances sleep after 15 minutes idle, and cold starts take 30-60s), ` +
+        `or the browser blocked the request because this page's origin is not in ` +
+        `the backend's ALLOWED_ORIGINS.`
+    );
+    err.kind = 'network';
+    err.cause = cause;
+    throw err;
+  }
+
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const body = await response.json();
+      detail = body.detail || body.message || '';
+    } catch {
+      detail = '';
+    }
+    const err = new Error(
+      detail || `The backend returned HTTP ${response.status}.`
+    );
+    err.kind = 'http';
+    err.status = response.status;
+    throw err;
+  }
+
+  return response;
+}
+
 export const api = {
+  /**
+   * Backend status: which storage backend is live, and the configured council.
+   */
+  async getHealth() {
+    const response = await request('/');
+    return response.json();
+  },
+
   /**
    * List all conversations.
    */
   async listConversations() {
-    const response = await fetch(`${API_BASE}/api/conversations`);
-    if (!response.ok) {
-      throw new Error('Failed to list conversations');
-    }
+    const response = await request('/api/conversations');
     return response.json();
   },
 
@@ -21,16 +66,13 @@ export const api = {
    * Create a new conversation.
    */
   async createConversation() {
-    const response = await fetch(`${API_BASE}/api/conversations`, {
+    const response = await request('/api/conversations', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({}),
     });
-    if (!response.ok) {
-      throw new Error('Failed to create conversation');
-    }
     return response.json();
   },
 
@@ -38,12 +80,7 @@ export const api = {
    * Get a specific conversation.
    */
   async getConversation(conversationId) {
-    const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}`
-    );
-    if (!response.ok) {
-      throw new Error('Failed to get conversation');
-    }
+    const response = await request(`/api/conversations/${conversationId}`);
     return response.json();
   },
 
@@ -51,8 +88,8 @@ export const api = {
    * Send a message in a conversation.
    */
   async sendMessage(conversationId, content) {
-    const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}/message`,
+    const response = await request(
+      `/api/conversations/${conversationId}/message`,
       {
         method: 'POST',
         headers: {
@@ -61,9 +98,6 @@ export const api = {
         body: JSON.stringify({ content }),
       }
     );
-    if (!response.ok) {
-      throw new Error('Failed to send message');
-    }
     return response.json();
   },
 
@@ -75,8 +109,8 @@ export const api = {
    * @returns {Promise<void>}
    */
   async sendMessageStream(conversationId, content, onEvent) {
-    const response = await fetch(
-      `${API_BASE}/api/conversations/${conversationId}/message/stream`,
+    const response = await request(
+      `/api/conversations/${conversationId}/message/stream`,
       {
         method: 'POST',
         headers: {
@@ -85,10 +119,6 @@ export const api = {
         body: JSON.stringify({ content }),
       }
     );
-
-    if (!response.ok) {
-      throw new Error('Failed to send message');
-    }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
